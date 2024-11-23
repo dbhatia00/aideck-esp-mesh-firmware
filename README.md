@@ -62,3 +62,14 @@ Just pre-pend make with tb, for instance
 3. Turn off CF, restart in boot mode 
 4. Flash cf firmware 
 5. Connect in cfclient
+
+### TODO
+
+1. Reimplement mesh code 
+    Figure out why discovery startup fails when the mesh code is turned on 
+
+    CPX: ESP32: I (437) DISCOVERY: Hostname is aideck-04A1A4
+    CPX: ESP32: I (437) DISCOVERY: MAC (STA) is 78:e3:6d:4:a1:a4
+    CPX: ESP32: I (447) ESP32_MESH: Initializing ESP32 Mesh Communication
+    CPX: ESP32: W (447) ESP32_MESH: com_to_mesh_task created
+2. Program receive
