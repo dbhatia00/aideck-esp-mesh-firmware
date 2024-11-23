@@ -17,11 +17,11 @@ static const char *TAG = "ESP32_MESH";
 // Function to initialize mesh network
 void mesh_init() {
     // Mesh network initialization
-    ESP_LOGW(TAG, "Initializing ESP32 Mesh Communication");
+    ESP_LOGI(TAG, "Initializing ESP32 Mesh Communication");
     
     // Create task to handle forwarding telemetry packets from COM to mesh
     if (xTaskCreate(com_to_mesh_task, "com_to_mesh_task", 4096, NULL, 5, NULL) != pdPASS) {
-        ESP_LOGW(TAG, "Failed to create com_to_mesh_task");
+        ESP_LOGE(TAG, "Failed to create com_to_mesh_task");
     } else {
         ESP_LOGW(TAG, "com_to_mesh_task created");
     }
@@ -40,7 +40,7 @@ void mesh_send_telemetry(const TelemetryData_t* telemetryData) {
 
     esp_err_t err = esp_mesh_send(&dest_addr, &mesh_data, 0, NULL, 0);
     if (err != ESP_OK) {
-        ESP_LOGW(TAG, "Error sending mesh data: %s", esp_err_to_name(err));
+        ESP_LOGE(TAG, "Error sending mesh data: %s", esp_err_to_name(err));
     } else {
         ESP_LOGW(TAG, "Data sent over mesh, length: %d", (int)mesh_data.size);
     }
@@ -52,9 +52,7 @@ void com_to_mesh_task(void *arg) {
 
     while (1) {
         // Blocking call to wait for a packet from the application queue
-        ESP_LOGW(TAG, "Waiting for telemetry data from Crazyflie...");
         com_receive_app_blocking(&packet);
-        ESP_LOGW(TAG, "Received packet from Crazyflie");
 
         // Assuming the packet contains telemetry data
         if (packet.dataLength == sizeof(TelemetryData_t)) {
@@ -62,8 +60,11 @@ void com_to_mesh_task(void *arg) {
             memcpy(&receivedData, packet.data, sizeof(TelemetryData_t));
 
             // Log the telemetry data
-            ESP_LOGE(TAG, "Forwarding telemetry to mesh: DroneID=%d, Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f\n",
-                     receivedData.droneID, receivedData.batteryVoltage, receivedData.roll,
+            ESP_LOGI(TAG, "Forwarding telemetry to mesh: DroneID=%d\n",
+                     receivedData.droneID);
+
+            ESP_LOGI(TAG, "Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f\n",
+                     receivedData.batteryVoltage, receivedData.roll,
                      receivedData.pitch, receivedData.yaw);
 
             // Forward the telemetry data to the mesh network

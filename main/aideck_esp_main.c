@@ -77,6 +77,7 @@ void app_main(void)
     esp_log_level_set("COM", ESP_LOG_INFO);
     esp_log_level_set("TEST", ESP_LOG_INFO);
     esp_log_level_set("WIFI", ESP_LOG_INFO);
+    esp_log_level_set("ESP32_MESH", ESP_LOG_INFO);
 
     ESP_ERROR_CHECK(nvs_flash_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());

@@ -14,7 +14,7 @@
 
 #define DEBUG_MODULE "ESP32_MESH"
 typedef struct {
-    int droneID;
+    uint8_t droneID;
     double batteryVoltage;
     double roll;
     double pitch;
