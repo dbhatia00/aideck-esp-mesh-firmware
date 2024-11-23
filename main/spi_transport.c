@@ -39,8 +39,6 @@
 #include "driver/spi_slave.h"
 #include "esp_log.h"
 
-#include "cpx_receive.h"
-
 #define GAP_RTT_GPIO 32
 #define ESP_RTT_GPIO 2
 
@@ -139,13 +137,8 @@ static void spi_task(void* _param) {
 
             memcpy(qPacket.data, &rx_buffer->structuredData.data, qPacket.dataLength);
 
-            // Unneeded for the time being? Handled by the xQueue below
-            // xQueueSend(rx_queue, &qPacket, portMAX_DELAY);
+            xQueueSend(rx_queue, &qPacket, portMAX_DELAY);
 
-            // Forward the received packet to CPX receive queue
-            if (cpxRxQueue) {
-                xQueueSend(cpxRxQueue, &qPacket, portMAX_DELAY);
-            }
         }
     }
 }

@@ -44,10 +44,14 @@
 #define ESP_SYS_QUEUE_SIZE (sizeof(esp_routable_packet_t))
 #define ESP_TEST_QUEUE_LENGTH (2)
 #define ESP_TEST_QUEUE_SIZE (sizeof(esp_routable_packet_t))
+#define ESP_APP_QUEUE_LENGTH (2)
+#define ESP_APP_QUEUE_SIZE (sizeof(esp_routable_packet_t))
 
 static xQueueHandle espWiFiCTRLQueue;
 static xQueueHandle espSystemQueue;
 static xQueueHandle espTESTQueue;
+static xQueueHandle espAPPQueue;  // New queue for CPX_F_APP (telemetry data) packets
+
 
 static esp_routable_packet_t rxp;
 
@@ -71,6 +75,9 @@ static void com_rx(void* _param) {
       case CPX_F_SYSTEM:
         xQueueSend(espSystemQueue, &rxp, (TickType_t) portMAX_DELAY);
         break;
+      case CPX_F_APP:
+        xQueueSend(espAPPQueue, &rxp, (TickType_t) portMAX_DELAY);
+        break;
       default:
         ESP_LOGW("COM", "Cannot handle 0x%02X", rxp.route.function);
     }
@@ -81,6 +88,7 @@ void com_init() {
   espWiFiCTRLQueue = xQueueCreate(ESP_WIFI_CTRL_QUEUE_LENGTH, ESP_WIFI_CTRL_QUEUE_SIZE);
   espSystemQueue = xQueueCreate(ESP_SYS_QUEUE_LENGTH, ESP_SYS_QUEUE_SIZE);
   espTESTQueue = xQueueCreate(ESP_TEST_QUEUE_LENGTH, ESP_TEST_QUEUE_SIZE);
+  espAPPQueue = xQueueCreate(ESP_APP_QUEUE_LENGTH, ESP_APP_QUEUE_SIZE);  // Add espAPPQueue creation
 
   startUpEventGroup = xEventGroupCreate();
   xEventGroupClearBits(startUpEventGroup, START_UP_RX_TASK);
@@ -104,4 +112,8 @@ void com_receive_wifi_ctrl_blocking(esp_routable_packet_t * packet) {
 
 void com_receive_system_blocking(esp_routable_packet_t * packet) {
   xQueueReceive(espSystemQueue, packet, (TickType_t) portMAX_DELAY);
+}
+
+void com_receive_app_blocking(esp_routable_packet_t * packet) {
+  xQueueReceive(espAPPQueue, packet, (TickType_t) portMAX_DELAY);
 }

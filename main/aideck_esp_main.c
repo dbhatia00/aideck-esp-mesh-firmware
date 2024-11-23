@@ -44,7 +44,6 @@
 #include "wifi.h"
 #include "system.h"
 
-#include "cpx_receive.h"
 #include "mesh_network.h"
 
 /* The LED is connected on GPIO */
@@ -123,11 +122,8 @@ void app_main(void)
 
     discovery_init();
 
-    // Initialize CPX receive functionality
-    cpxReceiveInit();
-
     // Initialize mesh network
-    mesh_network_init();
+    mesh_init();
 
     while(1) {
         vTaskDelay(10);
