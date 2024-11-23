@@ -54,3 +54,11 @@ Just pre-pend make with tb, for instance
 `tb make`
 
 `tb make clean`
+
+### Notes for building Meshflie
+
+1. Bootload the crazyflie and ai deck from the cf client
+2. Flash this (aideck esp) code
+3. Turn off CF, restart in boot mode 
+4. Flash cf firmware 
+5. Connect in cfclient
