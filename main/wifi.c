@@ -164,7 +164,6 @@ static void event_handler(void* handlerArg, esp_event_base_t eventBase, int32_t 
 /* Initialize WiFi as AP */
 static void wifi_init_softap(const char *ssid, const char* key)
 {
-  vTaskDelay(5000 / portTICK_PERIOD_MS); // Delay for 5 seconds
   esp_netif_t* ap_netif = esp_netif_create_default_wifi_ap();
   assert(ap_netif);
 

@@ -8,8 +8,7 @@
 #include "freertos/task.h"
 #include "cpx.h"
 #include "esp_log.h"
-#include "esp_mesh.h"
-#include "esp_mesh_internal.h"
+#include "esp_now.h"
 #include "com.h"  // Include com.h to use com_receive_app_blocking()
 
 #define DEBUG_MODULE "ESP32_MESH"
@@ -25,5 +24,7 @@ typedef struct {
 // Function prototypes
 void mesh_init();
 void com_to_mesh_task(void *arg);
+void esp_now_recv_cb(const uint8_t *mac_addr, const uint8_t *data, int data_len);
+void esp_now_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status);
 
 #endif // MESH_NETWORK_HANDLER_H

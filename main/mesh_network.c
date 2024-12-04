@@ -23,14 +23,6 @@ void mesh_init() {
     // Add a delay to ensure Wi-Fi is properly initialized
     vTaskDelay(1000 / portTICK_PERIOD_MS); // 1-second delay
 
-    // Initialize mesh-specific configuration only
-    ESP_LOGI(TAG, "Starting init: %d", esp_get_free_heap_size());
-    mesh_cfg_t mesh_cfg = MESH_INIT_CONFIG_DEFAULT();
-    uint8_t mesh_id[6] = {0x7D, 0x0A, 0x2C, 0x9E, 0x33, 0x56}; // Example Mesh ID
-    memcpy(mesh_cfg.mesh_id.addr, mesh_id, 6);
-    mesh_cfg.channel = 0; // Auto-select channel
-    mesh_cfg.router.ssid_len = 0; // No connection to external router
-
     // Make sure Wi-Fi is in station mode
     ESP_LOGI(TAG, "Making sure Wi-Fi is in station mode: %d", esp_get_free_heap_size());
 
@@ -55,15 +47,15 @@ void mesh_init() {
     ESP_LOGI(TAG, "Delay: %d", esp_get_free_heap_size());
     vTaskDelay(500 / portTICK_PERIOD_MS);
 
-/*
     // Initialize and configure the mesh
+    
     ESP_LOGI(TAG, "Mesh Init: %d", esp_get_free_heap_size());
     esp_err_t err = esp_mesh_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Mesh initialization failed: %s", esp_err_to_name(err));
         ESP_LOGI(TAG, "Free heap after mesh init: %d", esp_get_free_heap_size());
         return; // Prevents continuing if initialization failed
-    }
+    }/*
     ESP_LOGI(TAG, "Mesh initialization succeeded");
     ESP_LOGI(TAG, "Mesh Set Config");
     ESP_ERROR_CHECK(esp_mesh_set_config(&mesh_cfg));
@@ -71,9 +63,9 @@ void mesh_init() {
     ESP_ERROR_CHECK(esp_mesh_set_max_layer(6));
     ESP_LOGI(TAG, "Mesh Start");
     ESP_ERROR_CHECK(esp_mesh_start());
-
-    ESP_LOGI(TAG, "Mesh initialLayerized and started");
 */
+    ESP_LOGI(TAG, "Mesh initialLayerized and started");
+
     // Create task to handle forwarding telemetry packets from COM to mesh
     if (xTaskCreate(com_to_mesh_task, "com_to_mesh_task", 8192, NULL, 5, NULL) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create com_to_mesh_task");
