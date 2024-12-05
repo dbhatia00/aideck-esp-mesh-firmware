@@ -55,15 +55,20 @@ void mesh_init() {
     }
 
     ESP_LOGI(TAG, "Mesh initialization succeeded");
+
+    mesh_cfg_t mesh_cfg = MESH_INIT_CONFIG_DEFAULT();
+    uint8_t mesh_id[6] = {0x7D, 0x0A, 0x2C, 0x9E, 0x33, 0x56}; // Unique Mesh ID
+    memcpy(mesh_cfg.mesh_id.addr, mesh_id, 6);
+    mesh_cfg.channel = 6; // Use a fixed Wi-Fi channel
+    mesh_cfg.router.ssid_len = 0; // No external router
+    mesh_cfg.router.ssid[0] = '\0'; // Clear SSID
+    mesh_cfg.router.password[0] = '\0'; // Clear password
+    mesh_cfg.crypto_funcs = NULL; // Disable encryption for simplicity
+
     ESP_LOGI(TAG, "Mesh Set Config");
 /*
-    mesh_cfg_t mesh_cfg = MESH_INIT_CONFIG_DEFAULT();
-    uint8_t mesh_id[6] = {0x7D, 0x0A, 0x2C, 0x9E, 0x33, 0x56}; // Example Mesh ID
-    memcpy(mesh_cfg.mesh_id.addr, mesh_id, 6);
-    mesh_cfg.channel = 0; // Auto-select channel
-    mesh_cfg.router.ssid_len = 0; // No connection to external router
-
     ESP_ERROR_CHECK(esp_mesh_set_config(&mesh_cfg));
+
     ESP_LOGI(TAG, "Mesh Set Layer");
     ESP_ERROR_CHECK(esp_mesh_set_max_layer(6));
     ESP_LOGI(TAG, "Mesh Start");
