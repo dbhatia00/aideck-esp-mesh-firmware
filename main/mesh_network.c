@@ -5,8 +5,10 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "cpx.h"
+#include "wifi.h"
 #include "esp_log.h"
 #include "esp_mesh.h"
+#include "esp_event.h"
 #include "esp_mesh_internal.h"
 #include "com.h"  // Include com.h to use com_receive_app_blocking()
 #include "mesh_network.h"  // Include the header for function prototypes
@@ -23,90 +25,104 @@ bool validate_wifi_state() {
         return false;
     }
 
-    // Check if Wi-Fi is ready (optional: based on initialization flags or GAP8 logic)
+    // Wi-Fi is ready
     ESP_LOGI(TAG, "Wi-Fi is in station mode and ready for ESP-MESH");
     return true;
 }
 
+bool wait_for_wifi_ready() {
+    for (int i = 0; i < 100; i++) { // Retry 5 times
+        if (validate_wifi_state()) {
+            return true;
+        }
+        ESP_LOGW(TAG, "Wi-Fi not ready, retrying...");
+        vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay for 1 second
+    }
+    ESP_LOGE(TAG, "Wi-Fi not ready after retries");
+    return false;
+}
 
-
-// Function to initialize mesh network
 void mesh_init() {
     ESP_LOGI(TAG, "Initializing ESP32 Mesh Communication");
 
     // Ensure Wi-Fi is in station mode
     wifi_mode_t current_wifi_mode;
-    if (esp_wifi_get_mode(&current_wifi_mode) == ESP_OK && current_wifi_mode != WIFI_MODE_STA) {
-        ESP_LOGW(TAG, "Wi-Fi is not in station mode. Setting to station mode.");
-        esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA); // Force station mode
+    if (esp_wifi_get_mode(&current_wifi_mode) != ESP_OK || current_wifi_mode != WIFI_MODE_STA) {
+        ESP_LOGE(TAG, "Wi-Fi is not in station mode. Setting station mode.");
+        esp_err_t err = esp_wifi_set_mode(WIFI_MODE_STA);
         if (err != ESP_OK) {
-            ESP_LOGE(TAG, "Failed to set Wi-Fi to station mode: %s", esp_err_to_name(err));
+            ESP_LOGE(TAG, "Failed to set Wi-Fi mode: %s", esp_err_to_name(err));
             return;
         }
-        ESP_LOGI(TAG, "Delaying to ensure Wi-Fi mode transition...");
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay for 1 second
+        vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay for mode transition
     }
 
-    // Validate Wi-Fi state
-    if (!validate_wifi_state()) {
-        ESP_LOGE(TAG, "Wi-Fi validation failed. Mesh initialization aborted.");
+    // Add a delay to ensure Wi-Fi subsystem is ready
+    ESP_LOGI(TAG, "Delaying to ensure Wi-Fi readiness...");
+
+    // Call this before mesh configuration
+    if (!wait_for_wifi_ready()) {
+        ESP_LOGE(TAG, "Wi-Fi not ready, aborting mesh initialization");
         return;
     }
 
-    // Initialize mesh_cfg
+    // Proceed with mesh initialization
     mesh_cfg_t mesh_cfg = MESH_INIT_CONFIG_DEFAULT();
-    uint8_t mesh_id[6] = {0x7D, 0x0A, 0x2C, 0x9E, 0x33, 0x56}; // Unique Mesh ID
-    memcpy(mesh_cfg.mesh_id.addr, mesh_id, 6);
+    uint8_t mesh_id[6] = {0x7D, 0x0A, 0x2C, 0x9E, 0x33, 0x56};
+    memcpy(mesh_cfg.mesh_id.addr, mesh_id, sizeof(mesh_id));
 
-    // Retrieve Wi-Fi channel dynamically
-    uint8_t current_channel = 1; // Default fallback channel
-    if (esp_wifi_get_channel(&current_channel, NULL) == ESP_OK) {
-        ESP_LOGI(TAG, "Channel retrieved: %d", current_channel);
-        mesh_cfg.channel = current_channel;
-    } else {
-        ESP_LOGE(TAG, "Failed to retrieve Wi-Fi channel, using default: %d", current_channel);
-        mesh_cfg.channel = current_channel;
-    }
+    mesh_cfg.channel = 0;  // Auto-select channel
+    mesh_cfg.router.ssid_len = strlen("MESH_PLACEHOLDER");
+    memcpy(mesh_cfg.router.ssid, "MESH_PLACEHOLDER", mesh_cfg.router.ssid_len);
+    memset(mesh_cfg.router.password, 0, sizeof(mesh_cfg.router.password));
+    mesh_cfg.crypto_funcs = NULL;
 
-    mesh_cfg.router.ssid_len = 0;              // No external router
-    memset(mesh_cfg.router.ssid, 0, 32);       // Clear SSID
-    memset(mesh_cfg.router.password, 0, 64);   // Clear password
-    mesh_cfg.crypto_funcs = NULL;              // Disable encryption
-
+    mesh_cfg.mesh_ap.max_connection = 6; // Max devices in the mesh network
+    memset(mesh_cfg.mesh_ap.password, 0, sizeof(mesh_cfg.mesh_ap.password)); // Open network
+    
     ESP_LOGI(TAG, "Free heap before config: %d", esp_get_free_heap_size());
 
-    // Initialize mesh
+    // Log mesh configuration for debugging
+    ESP_LOGI(TAG, "Mesh ID: %02X:%02X:%02X:%02X:%02X:%02X",
+             mesh_cfg.mesh_id.addr[0], mesh_cfg.mesh_id.addr[1],
+             mesh_cfg.mesh_id.addr[2], mesh_cfg.mesh_id.addr[3],
+             mesh_cfg.mesh_id.addr[4], mesh_cfg.mesh_id.addr[5]);
+    ESP_LOGI(TAG, "Channel: %d", mesh_cfg.channel);
+    ESP_LOGI(TAG, "Router SSID Length: %d", mesh_cfg.router.ssid_len);
+
+    // Initialize ESP-MESH
     esp_err_t err = esp_mesh_init();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Mesh initialization failed: %s", esp_err_to_name(err));
         return;
     }
 
-    // Set mesh event handler
-    // esp_mesh_set_mesh_event_cb(mesh_event_handler);
+    ESP_LOGI(TAG, "Mesh Config: SSID=%s, SSID_LEN=%d, CHANNEL=%d",
+         (char *)mesh_cfg.router.ssid, mesh_cfg.router.ssid_len, mesh_cfg.channel);
+    ESP_LOGI(TAG, "Ensuring Wi-Fi stability...");
+    vTaskDelay(2000 / portTICK_PERIOD_MS); // 2-second delay
 
     // Set mesh configuration
-    /*
     err = esp_mesh_set_config(&mesh_cfg);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_mesh_set_config failed: %s", esp_err_to_name(err));
         return;
     }
 
-    // Start the mesh network
+    // Start ESP-MESH
     err = esp_mesh_start();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "esp_mesh_start failed: %s", esp_err_to_name(err));
         return;
     }
-    */
-    ESP_LOGI(TAG, "ESP-MESH initialized and started");
+
+    ESP_LOGI(TAG, "ESP-MESH initialized and started successfully");
 
     // Create task to handle forwarding telemetry packets from COM to mesh
     if (xTaskCreate(com_to_mesh_task, "com_to_mesh_task", 8192, NULL, 5, NULL) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create com_to_mesh_task");
     } else {
-        ESP_LOGW(TAG, "com_to_mesh_task created");
+        ESP_LOGI(TAG, "com_to_mesh_task created successfully");
     }
 }
 

@@ -94,10 +94,11 @@ static void event_handler(void* handlerArg, esp_event_base_t eventBase, int32_t 
   if (eventBase == WIFI_EVENT) {
     switch(eventId) {
       case WIFI_EVENT_STA_START:
+        ESP_LOGI(TAG, "Wi-Fi started in station mode");
         ESP_ERROR_CHECK(esp_wifi_connect());
         break;
       case WIFI_EVENT_STA_DISCONNECTED:
-        ESP_ERROR_CHECK(esp_wifi_connect());
+        //ESP_ERROR_CHECK(esp_wifi_connect());
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
         ESP_LOGI(TAG,"Disconnected from access point");
         break;
@@ -228,15 +229,16 @@ static void wifi_ctrl(void* _param) {
         ESP_LOGD(TAG, "KEY: %s", key);
         // Save to NVS?
         break;
-      case WIFI_CTRL_WIFI_CONNECT:
+    case WIFI_CTRL_WIFI_CONNECT:
         ESP_LOGD("WIFI", "Should connect");
 
         if (strlen(ssid) > 0) {
-          if (rxp.data[1] == 0) {
+          ESP_LOGI(TAG, "SSID: %s, Mode: %d", ssid, rxp.data[1]);
+          if (rxp.data[1] == 0) {  // Station mode
             wifi_init_sta(ssid, key);
-          } else {
+          } else {                 // Soft AP mode
             wifi_init_softap(ssid, key);
-          }          
+          }
         } else {
           ESP_LOGW(TAG, "No SSID set, cannot start wifi");
         }
