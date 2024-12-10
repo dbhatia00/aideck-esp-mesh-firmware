@@ -7,7 +7,7 @@
 #include "cpx.h"
 #include "wifi.h"
 #include "esp_log.h"
-#include "esp_mesh.h"
+#include "esp_now.h"
 #include "esp_event.h"
 #include "esp_mesh_internal.h"
 #include "com.h"  // Include com.h to use com_receive_app_blocking()
@@ -26,12 +26,12 @@ bool validate_wifi_state() {
     }
 
     // Wi-Fi is ready
-    ESP_LOGI(TAG, "Wi-Fi is in station mode and ready for ESP-MESH");
+    ESP_LOGI(TAG, "Wi-Fi is in station mode and ready for protocol init");
     return true;
 }
 
 bool wait_for_wifi_ready() {
-    for (int i = 0; i < 100; i++) { // Retry 5 times
+    for (int i = 0; i < 10; i++) { // Retry 10 times
         if (validate_wifi_state()) {
             return true;
         }
@@ -40,6 +40,48 @@ bool wait_for_wifi_ready() {
     }
     ESP_LOGE(TAG, "Wi-Fi not ready after retries");
     return false;
+}
+
+void espnow_receive_cb(const uint8_t *mac_addr, const uint8_t *data, int len) {
+    ESP_LOGI(TAG, "Received data from MAC: %02X:%02X:%02X:%02X:%02X:%02X",
+             mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+}
+
+void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
+    ESP_LOGI(TAG, "Send status to MAC %02X:%02X:%02X:%02X:%02X:%02X: %s",
+             mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5],
+             status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+}
+
+
+// Task to handle forwarding packets from COM to mesh
+void com_to_mesh_task(void *arg) {
+    esp_routable_packet_t packet;
+
+    while (1) {
+        // Blocking call to wait for a packet from the application queue
+        com_receive_app_blocking(&packet);
+
+        // Assuming the packet contains telemetry data
+        if (packet.dataLength == sizeof(TelemetryData_t)) {
+            TelemetryData_t receivedData;
+            memcpy(&receivedData, packet.data, sizeof(TelemetryData_t));
+
+            // Log the telemetry data
+            ESP_LOGI(TAG, "Forwarding telemetry via ESP-MESH: DroneID=%d",
+                     receivedData.droneID);
+
+            ESP_LOGI(TAG, "Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f\n",
+                     receivedData.batteryVoltage, receivedData.roll,
+                     receivedData.pitch, receivedData.yaw);
+
+            // Forward the telemetry data to the mesh network
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+
+        } else {
+            ESP_LOGE(TAG, "Received data of unexpected length: %d, expected: %d", packet.dataLength, sizeof(TelemetryData_t));
+        }
+    }
 }
 
 void mesh_init() {
@@ -66,112 +108,22 @@ void mesh_init() {
         return;
     }
 
-    // Proceed with mesh initialization
-    mesh_cfg_t mesh_cfg = MESH_INIT_CONFIG_DEFAULT();
-    uint8_t mesh_id[6] = {0x7D, 0x0A, 0x2C, 0x9E, 0x33, 0x56};
-    memcpy(mesh_cfg.mesh_id.addr, mesh_id, sizeof(mesh_id));
-
-    mesh_cfg.channel = 0;  // Auto-select channel
-    mesh_cfg.router.ssid_len = strlen("MESH_PLACEHOLDER");
-    memcpy(mesh_cfg.router.ssid, "MESH_PLACEHOLDER", mesh_cfg.router.ssid_len);
-    memset(mesh_cfg.router.password, 0, sizeof(mesh_cfg.router.password));
-    mesh_cfg.crypto_funcs = NULL;
-
-    mesh_cfg.mesh_ap.max_connection = 6; // Max devices in the mesh network
-    memset(mesh_cfg.mesh_ap.password, 0, sizeof(mesh_cfg.mesh_ap.password)); // Open network
-    
-    ESP_LOGI(TAG, "Free heap before config: %d", esp_get_free_heap_size());
-
-    // Log mesh configuration for debugging
-    ESP_LOGI(TAG, "Mesh ID: %02X:%02X:%02X:%02X:%02X:%02X",
-             mesh_cfg.mesh_id.addr[0], mesh_cfg.mesh_id.addr[1],
-             mesh_cfg.mesh_id.addr[2], mesh_cfg.mesh_id.addr[3],
-             mesh_cfg.mesh_id.addr[4], mesh_cfg.mesh_id.addr[5]);
-    ESP_LOGI(TAG, "Channel: %d", mesh_cfg.channel);
-    ESP_LOGI(TAG, "Router SSID Length: %d", mesh_cfg.router.ssid_len);
-
-    // Initialize ESP-MESH
-    esp_err_t err = esp_mesh_init();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Mesh initialization failed: %s", esp_err_to_name(err));
+    if (esp_now_init() != ESP_OK) {
+        ESP_LOGE(TAG, "ESP-NOW initialization failed");
         return;
     }
 
-    ESP_LOGI(TAG, "Mesh Config: SSID=%s, SSID_LEN=%d, CHANNEL=%d",
-         (char *)mesh_cfg.router.ssid, mesh_cfg.router.ssid_len, mesh_cfg.channel);
-    ESP_LOGI(TAG, "Ensuring Wi-Fi stability...");
-    vTaskDelay(2000 / portTICK_PERIOD_MS); // 2-second delay
+    ESP_LOGI(TAG, "Successfully Initialized ESP-NOW! Setting up callbacks...");
+    esp_now_register_recv_cb(espnow_receive_cb);
+    esp_now_register_send_cb(espnow_send_cb);
 
-    // Set mesh configuration
-    err = esp_mesh_set_config(&mesh_cfg);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_mesh_set_config failed: %s", esp_err_to_name(err));
-        return;
-    }
-
-    // Start ESP-MESH
-    err = esp_mesh_start();
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "esp_mesh_start failed: %s", esp_err_to_name(err));
-        return;
-    }
-
-    ESP_LOGI(TAG, "ESP-MESH initialized and started successfully");
+    // Log free heap for debugging purposes
+    ESP_LOGI(TAG, "Free heap before task creation: %d", esp_get_free_heap_size());
 
     // Create task to handle forwarding telemetry packets from COM to mesh
     if (xTaskCreate(com_to_mesh_task, "com_to_mesh_task", 8192, NULL, 5, NULL) != pdPASS) {
         ESP_LOGE(TAG, "Failed to create com_to_mesh_task");
     } else {
         ESP_LOGI(TAG, "com_to_mesh_task created successfully");
-    }
-}
-
-// Function to send telemetry data over mesh
-void mesh_send_telemetry(const TelemetryData_t* telemetryData) {
-    mesh_data_t mesh_data;
-    mesh_data.data = (uint8_t *)telemetryData;
-    mesh_data.size = sizeof(TelemetryData_t);
-    mesh_data.proto = MESH_PROTO_BIN;
-    mesh_data.tos = MESH_TOS_P2P;
-
-    mesh_addr_t dest_addr;
-    memset(dest_addr.addr, 0, 6); // Set to broadcast address to send to all nodes
-
-    esp_err_t err = esp_mesh_send(&dest_addr, &mesh_data, 0, NULL, 0);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Error sending mesh data: %s", esp_err_to_name(err));
-    } else {
-        ESP_LOGW(TAG, "Data sent over mesh, length: %d", (int)mesh_data.size);
-    }
-}
-
-// Task to handle forwarding packets from COM to mesh
-void com_to_mesh_task(void *arg) {
-    esp_routable_packet_t packet;
-
-    while (1) {
-        // Blocking call to wait for a packet from the application queue
-        com_receive_app_blocking(&packet);
-
-        // Assuming the packet contains telemetry data
-        if (packet.dataLength == sizeof(TelemetryData_t)) {
-            TelemetryData_t receivedData;
-            memcpy(&receivedData, packet.data, sizeof(TelemetryData_t));
-
-            // Log the telemetry data
-            ESP_LOGI(TAG, "Forwarding telemetry via ESP-MESH: DroneID=%d",
-                     receivedData.droneID);
-
-            ESP_LOGI(TAG, "Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f\n",
-                     receivedData.batteryVoltage, receivedData.roll,
-                     receivedData.pitch, receivedData.yaw);
-
-            // Forward the telemetry data to the mesh network
-            //mesh_send_telemetry(&receivedData);
-            vTaskDelay(10 / portTICK_PERIOD_MS);
-
-        } else {
-            ESP_LOGE(TAG, "Received data of unexpected length: %d, expected: %d", packet.dataLength, sizeof(TelemetryData_t));
-        }
     }
 }
