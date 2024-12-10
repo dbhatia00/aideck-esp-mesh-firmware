@@ -45,12 +45,39 @@ bool wait_for_wifi_ready() {
 void espnow_receive_cb(const uint8_t *mac_addr, const uint8_t *data, int len) {
     ESP_LOGI(TAG, "Received data from MAC: %02X:%02X:%02X:%02X:%02X:%02X",
              mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5]);
+
+    if (len == sizeof(TelemetryData_t)) {
+        TelemetryData_t receivedTelemetry;
+        memcpy(&receivedTelemetry, data, sizeof(TelemetryData_t));
+
+        ESP_LOGI(TAG, "Telemetry Received -> DroneID=%d, Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f",
+                 receivedTelemetry.droneID, receivedTelemetry.batteryVoltage,
+                 receivedTelemetry.roll, receivedTelemetry.pitch, receivedTelemetry.yaw);
+    } else {
+        ESP_LOGW(TAG, "Received data of unexpected length: %d", len);
+    }
 }
 
 void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
     ESP_LOGI(TAG, "Send status to MAC %02X:%02X:%02X:%02X:%02X:%02X: %s",
              mac_addr[0], mac_addr[1], mac_addr[2], mac_addr[3], mac_addr[4], mac_addr[5],
              status == ESP_NOW_SEND_SUCCESS ? "Success" : "Fail");
+}
+
+
+void add_espnow_peer(const uint8_t *peer_mac) {
+    esp_now_peer_info_t peer_info = {0};
+    memcpy(peer_info.peer_addr, peer_mac, ESP_NOW_ETH_ALEN);
+    peer_info.channel = 0;  // Match Wi-Fi channel
+    peer_info.ifidx = ESP_IF_WIFI_STA;
+    peer_info.encrypt = false;  // No encryption for simplicity
+
+    if (esp_now_add_peer(&peer_info) != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to add ESP-NOW peer");
+    } else {
+        ESP_LOGI(TAG, "ESP-NOW peer added successfully: %02X:%02X:%02X:%02X:%02X:%02X",
+                 peer_mac[0], peer_mac[1], peer_mac[2], peer_mac[3], peer_mac[4], peer_mac[5]);
+    }
 }
 
 
@@ -76,6 +103,14 @@ void com_to_mesh_task(void *arg) {
                      receivedData.pitch, receivedData.yaw);
 
             // Forward the telemetry data to the mesh network
+
+            // Send telemetry over ESP-NOW
+            uint8_t broadcast_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+            esp_err_t err = esp_now_send(broadcast_mac, (uint8_t *)&receivedData, sizeof(TelemetryData_t));
+            if (err != ESP_OK) {
+                ESP_LOGE(TAG, "esp_now_send failed with error: %s", esp_err_to_name(err));
+            }
+
             vTaskDelay(10 / portTICK_PERIOD_MS);
 
         } else {
@@ -101,7 +136,8 @@ void mesh_init() {
 
     // Add a delay to ensure Wi-Fi subsystem is ready
     ESP_LOGI(TAG, "Delaying to ensure Wi-Fi readiness...");
-
+    vTaskDelay(2000 / portTICK_PERIOD_MS);
+    
     // Call this before mesh configuration
     if (!wait_for_wifi_ready()) {
         ESP_LOGE(TAG, "Wi-Fi not ready, aborting mesh initialization");
@@ -113,9 +149,12 @@ void mesh_init() {
         return;
     }
 
-    ESP_LOGI(TAG, "Successfully Initialized ESP-NOW! Setting up callbacks...");
+    ESP_LOGI(TAG, "Successfully Initialized ESP-NOW! Setting up callbacks and peers...");
     esp_now_register_recv_cb(espnow_receive_cb);
     esp_now_register_send_cb(espnow_send_cb);
+
+    uint8_t broadcast_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+    add_espnow_peer(broadcast_mac);
 
     // Log free heap for debugging purposes
     ESP_LOGI(TAG, "Free heap before task creation: %d", esp_get_free_heap_size());
