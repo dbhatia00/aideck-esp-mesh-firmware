@@ -49,10 +49,13 @@ void espnow_receive_cb(const uint8_t *mac_addr, const uint8_t *data, int len) {
     if (len == sizeof(TelemetryData_t)) {
         TelemetryData_t receivedTelemetry;
         memcpy(&receivedTelemetry, data, sizeof(TelemetryData_t));
+        // Log the telemetry data
+        ESP_LOGI(TAG, "Telemetry Received: DroneID=%d",
+                     receivedTelemetry.droneID);
 
-        ESP_LOGI(TAG, "Telemetry Received -> DroneID=%d, Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f",
-                 receivedTelemetry.droneID, receivedTelemetry.batteryVoltage,
-                 receivedTelemetry.roll, receivedTelemetry.pitch, receivedTelemetry.yaw);
+        ESP_LOGI(TAG, "Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f\n",
+                     receivedTelemetry.batteryVoltage, receivedTelemetry.roll,
+                     receivedTelemetry.pitch, receivedTelemetry.yaw);
     } else {
         ESP_LOGW(TAG, "Received data of unexpected length: %d", len);
     }
@@ -95,10 +98,10 @@ void com_to_mesh_task(void *arg) {
             memcpy(&receivedData, packet.data, sizeof(TelemetryData_t));
 
             // Log the telemetry data
-            ESP_LOGI(TAG, "Forwarding telemetry via ESP-MESH: DroneID=%d",
+            ESP_LOGD(TAG, "Forwarding telemetry via ESP-MESH: DroneID=%d",
                      receivedData.droneID);
 
-            ESP_LOGI(TAG, "Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f\n",
+            ESP_LOGD(TAG, "Voltage=%.2fV, Roll=%.2f, Pitch=%.2f, Yaw=%.2f\n",
                      receivedData.batteryVoltage, receivedData.roll,
                      receivedData.pitch, receivedData.yaw);
 
@@ -137,7 +140,7 @@ void mesh_init() {
     // Add a delay to ensure Wi-Fi subsystem is ready
     ESP_LOGI(TAG, "Delaying to ensure Wi-Fi readiness...");
     vTaskDelay(2000 / portTICK_PERIOD_MS);
-    
+
     // Call this before mesh configuration
     if (!wait_for_wifi_ready()) {
         ESP_LOGE(TAG, "Wi-Fi not ready, aborting mesh initialization");
