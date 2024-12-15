@@ -10,8 +10,8 @@
 #include "esp_now.h"
 #include "esp_event.h"
 #include "esp_mesh_internal.h"
-#include "com.h"  // Include com.h to use com_receive_app_blocking()
-#include "mesh_network.h"  // Include the header for function prototypes
+#include "com.h" 
+#include "mesh_network.h" 
 
 #define DEBUG_MODULE "ESP32_MESH"
 
@@ -31,12 +31,13 @@ bool validate_wifi_state() {
 }
 
 bool wait_for_wifi_ready() {
-    for (int i = 0; i < 10; i++) { // Retry 10 times
+    // Should be refactored in some way
+    for (int i = 0; i < 10; i++) {
         if (validate_wifi_state()) {
             return true;
         }
         ESP_LOGW(TAG, "Wi-Fi not ready, retrying...");
-        vTaskDelay(1000 / portTICK_PERIOD_MS); // Delay for 1 second
+        vTaskDelay(1000 / portTICK_PERIOD_MS); 
     }
     ESP_LOGE(TAG, "Wi-Fi not ready after retries");
     return false;
@@ -49,7 +50,7 @@ void espnow_receive_cb(const uint8_t *mac_addr, const uint8_t *data, int len) {
     if (len == sizeof(TelemetryData_t)) {
         TelemetryData_t receivedTelemetry;
         memcpy(&receivedTelemetry, data, sizeof(TelemetryData_t));
-        // Log the telemetry data
+        // Log the received telemetry data
         ESP_LOGI(TAG, "Telemetry Received: DroneID=%d",
                      receivedTelemetry.droneID);
 
@@ -71,7 +72,7 @@ void espnow_send_cb(const uint8_t *mac_addr, esp_now_send_status_t status) {
 void add_espnow_peer(const uint8_t *peer_mac) {
     esp_now_peer_info_t peer_info = {0};
     memcpy(peer_info.peer_addr, peer_mac, ESP_NOW_ETH_ALEN);
-    peer_info.channel = 0;  // Match Wi-Fi channel
+    peer_info.channel = 0;
     peer_info.ifidx = ESP_IF_WIFI_STA;
     peer_info.encrypt = false;  // No encryption for simplicity
 
@@ -105,15 +106,14 @@ void com_to_mesh_task(void *arg) {
                      receivedData.batteryVoltage, receivedData.roll,
                      receivedData.pitch, receivedData.yaw);
 
-            // Forward the telemetry data to the mesh network
-
-            // Send telemetry over ESP-NOW
+            // Send telemetry over ESP-NOW (using broadcast addr)
             uint8_t broadcast_mac[ESP_NOW_ETH_ALEN] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
             esp_err_t err = esp_now_send(broadcast_mac, (uint8_t *)&receivedData, sizeof(TelemetryData_t));
             if (err != ESP_OK) {
                 ESP_LOGE(TAG, "esp_now_send failed with error: %s", esp_err_to_name(err));
             }
 
+            // Should increase delay? The speed might be too much
             vTaskDelay(10 / portTICK_PERIOD_MS);
 
         } else {
@@ -126,6 +126,7 @@ void mesh_init() {
     ESP_LOGI(TAG, "Initializing ESP32 Mesh Communication");
 
     // Ensure Wi-Fi is in station mode
+    // Should refactor to use above fns, might be unnecessary?
     wifi_mode_t current_wifi_mode;
     if (esp_wifi_get_mode(&current_wifi_mode) != ESP_OK || current_wifi_mode != WIFI_MODE_STA) {
         ESP_LOGE(TAG, "Wi-Fi is not in station mode. Setting station mode.");

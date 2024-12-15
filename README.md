@@ -58,12 +58,13 @@ Just pre-pend make with tb, for instance
 ### Notes for building Meshflie
 
 1. Bootload the crazyflie and ai deck from the cf client
-2. Flash this (aideck esp) code
+2. Flash the GAP8 Code
+3. Flash this (aideck esp) code
 sudo docker run --rm -it -v $PWD:/module/ --device /dev/ttyUSB0 --privileged -P bitcraze/builder /bin/bash -c "source /new_home/.espressif/python_env/idf4.3_py3.10_env/bin/activate && make"
 
 cfloader flash build/aideck_esp.bin deck-bcAI:esp-fw -w radio://0/80/2M/E7E7E7E70D
-3. Turn off CF, restart in boot mode 
-4. Flash cf firmware 
-5. Connect in cfclient
+4. Turn off CF, restart in boot mode 
+5. Flash cf firmware 
+6. Connect in cfclient
 
 ### TODO
